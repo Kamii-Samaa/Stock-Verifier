@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useShipmentStore } from "@/lib/store"
 import { generateSummaryReport } from "@/lib/file-utils"
+import * as XLSX from "xlsx"
 
 type SummaryItem = {
   barcode: string
@@ -18,6 +19,7 @@ type SummaryItem = {
 export function SummaryReport() {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const { toast } = useToast()
   const { fileConfig, scannedItems } = useShipmentStore()
 
@@ -67,7 +69,7 @@ export function SummaryReport() {
     }
   }
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (summaryData.length === 0) {
       toast({
         title: "No data to export",
@@ -77,27 +79,109 @@ export function SummaryReport() {
       return
     }
 
-    // Create CSV content
-    const headers = ["Barcode", "Supplier Quantity", "Scanned Quantity", "Scan Count", "Discrepancy"]
-    const csvContent = [
-      headers.join(","),
-      ...summaryData.map((item) => {
-        const scanCount = scannedItems.filter((scan) => scan.barcode === item.barcode).length
-        return [item.barcode, item.supplierQuantity, item.scannedQuantity, scanCount, item.discrepancy].join(",")
-      }),
-    ].join("\n")
+    setIsExporting(true)
 
-    // Create download link
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement("a")
-    link.setAttribute("href", url)
-    link.setAttribute("download", "shipment_summary.csv")
-    link.style.visibility = "hidden"
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    try {
+      // Create a new workbook
+      const wb = XLSX.utils.book_new()
+
+      // Prepare data for export
+      const exportData = summaryData.map((item) => {
+        const scanCount = scannedItems.filter((scan) => scan.barcode === item.barcode).length
+        const difference = item.scannedQuantity - item.supplierQuantity
+
+        return {
+          // Format barcode as text by adding a single quote prefix
+          Barcode: `'${item.barcode}`,
+          "Sent Qty": item.supplierQuantity,
+          "Scanned Qty": item.scannedQuantity,
+          Difference: difference,
+          "Scan Count": scanCount,
+          Discrepancy: item.discrepancy,
+        }
+      })
+
+      // Add totals row
+      const totals = calculateTotals()
+      if (totals) {
+        exportData.push({
+          Barcode: "TOTALS",
+          "Sent Qty": totals.totalSent,
+          "Scanned Qty": totals.totalScanned,
+          Difference: totals.difference,
+          "Scan Count": "",
+          Discrepancy: "",
+        })
+      }
+
+      // Create worksheet from data
+      const ws = XLSX.utils.json_to_sheet(exportData)
+
+      // Set column widths
+      const colWidths = [
+        { wch: 20 }, // Barcode
+        { wch: 10 }, // Sent Qty
+        { wch: 10 }, // Scanned Qty
+        { wch: 10 }, // Difference
+        { wch: 10 }, // Scan Count
+        { wch: 15 }, // Discrepancy
+      ]
+      ws["!cols"] = colWidths
+
+      // Add the worksheet to the workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Summary Report")
+
+      // Generate Excel file
+      const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" })
+
+      // Create a Blob from the buffer
+      const blob = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
+
+      // Create download link
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      const date = new Date().toISOString().split("T")[0] // YYYY-MM-DD
+      link.setAttribute("href", url)
+      link.setAttribute("download", `shipment_summary_${date}.xlsx`)
+      link.style.visibility = "hidden"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Export successful",
+        description: "Summary report has been exported to Excel",
+      })
+    } catch (error) {
+      console.error("Export error:", error)
+      toast({
+        title: "Export failed",
+        description: "There was an error exporting the report",
+        variant: "destructive",
+      })
+    } finally {
+      setIsExporting(false)
+    }
   }
+
+  // Calculate totals for the summary
+  const calculateTotals = () => {
+    if (summaryData.length === 0) return null
+
+    const totalSent = summaryData.reduce((sum, item) => sum + item.supplierQuantity, 0)
+    const totalScanned = summaryData.reduce((sum, item) => sum + item.scannedQuantity, 0)
+    const difference = totalScanned - totalSent
+
+    return {
+      totalSent,
+      totalScanned,
+      difference,
+    }
+  }
+
+  const totals = calculateTotals()
 
   return (
     <div className="space-y-6">
@@ -117,8 +201,13 @@ export function SummaryReport() {
             </Button>
 
             {summaryData.length > 0 && (
-              <Button onClick={handleExportCSV} variant="outline" className="w-full sm:w-auto sm:ml-2">
-                Export to CSV
+              <Button
+                onClick={handleExportExcel}
+                variant="outline"
+                className="w-full sm:w-auto sm:ml-2"
+                disabled={isExporting}
+              >
+                {isExporting ? "Exporting..." : "Export to Excel"}
               </Button>
             )}
 
@@ -128,6 +217,49 @@ export function SummaryReport() {
             )}
           </div>
 
+          {/* Overall summary cards - MOVED TO TOP */}
+          {totals && (
+            <div className="my-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Total Sent</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-bold">{totals.totalSent}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Total Scanned</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-bold">{totals.totalScanned}</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">Difference</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p
+                    className={`text-3xl font-bold ${
+                      totals.difference === 0
+                        ? "text-green-600"
+                        : totals.difference > 0
+                          ? "text-blue-600"
+                          : "text-red-600"
+                    }`}
+                  >
+                    {totals.difference > 0 ? "+" : ""}
+                    {totals.difference}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {summaryData.length > 0 ? (
             <div className="overflow-x-auto mt-4">
               <Table>
@@ -136,6 +268,7 @@ export function SummaryReport() {
                     <TableHead>Barcode</TableHead>
                     <TableHead>Sent Qty</TableHead>
                     <TableHead>Scanned Qty</TableHead>
+                    <TableHead>Difference</TableHead>
                     <TableHead>Scan Count</TableHead>
                     <TableHead>Discrepancy</TableHead>
                   </TableRow>
@@ -144,12 +277,22 @@ export function SummaryReport() {
                   {summaryData.map((item, index) => {
                     // Count how many times this barcode was scanned
                     const scanCount = scannedItems.filter((scan) => scan.barcode === item.barcode).length
+                    // Calculate difference
+                    const difference = item.scannedQuantity - item.supplierQuantity
 
                     return (
                       <TableRow key={index}>
                         <TableCell>{item.barcode}</TableCell>
                         <TableCell>{item.supplierQuantity}</TableCell>
                         <TableCell className="font-medium">{item.scannedQuantity}</TableCell>
+                        <TableCell
+                          className={
+                            difference === 0 ? "text-green-600" : difference > 0 ? "text-blue-600" : "text-red-600"
+                          }
+                        >
+                          {difference > 0 ? "+" : ""}
+                          {difference}
+                        </TableCell>
                         <TableCell>{scanCount}</TableCell>
                         <TableCell>
                           <span className={item.discrepancy === "No discrepancy" ? "text-green-600" : "text-red-600"}>
@@ -159,6 +302,29 @@ export function SummaryReport() {
                       </TableRow>
                     )
                   })}
+
+                  {/* Totals row */}
+                  {totals && (
+                    <TableRow className="bg-gray-100 font-bold">
+                      <TableCell>TOTALS</TableCell>
+                      <TableCell>{totals.totalSent}</TableCell>
+                      <TableCell>{totals.totalScanned}</TableCell>
+                      <TableCell
+                        className={
+                          totals.difference === 0
+                            ? "text-green-600"
+                            : totals.difference > 0
+                              ? "text-blue-600"
+                              : "text-red-600"
+                        }
+                      >
+                        {totals.difference > 0 ? "+" : ""}
+                        {totals.difference}
+                      </TableCell>
+                      <TableCell></TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>

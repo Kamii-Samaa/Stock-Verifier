@@ -1,67 +1,126 @@
 "use client"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { FileUpload } from "@/components/file-upload"
-import { BarcodeScanner } from "@/components/barcode-scanner"
-import { SummaryReport } from "@/components/summary-report"
-import { SavedProgress } from "@/components/saved-progress"
-import { useEffect } from "react"
-import { useShipmentStore } from "@/lib/store"
+import type React from "react"
+
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
+import { useAuthStore } from "@/lib/auth-store"
 
 export default function Home() {
-  const { activeTab, setActiveTab } = useShipmentStore()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const { toast } = useToast()
+  const router = useRouter()
+  const { login, setUserType } = useAuthStore()
 
-  // Handle tab changes
-  useEffect(() => {
-    const handleTabChange = (value: string) => {
-      setActiveTab(value)
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    // Check against hardcoded admin credentials
+    if (email === "kristophardivine@gmail.com" && password === "Thantophobia1!") {
+      login("admin", email)
+      toast({
+        title: "Login successful",
+        description: "Welcome back, Admin!",
+      })
+      router.push("/dashboard")
+    } else {
+      toast({
+        title: "Login failed",
+        description: "Invalid email or password",
+        variant: "destructive",
+      })
     }
 
-    // Add event listeners to tab triggers
-    const tabTriggers = document.querySelectorAll('[role="tab"]')
-    tabTriggers.forEach((trigger) => {
-      trigger.addEventListener("click", () => {
-        const value = trigger.getAttribute("data-value")
-        if (value) handleTabChange(value)
-      })
+    setIsLoading(false)
+  }
+
+  const handleGuestLogin = () => {
+    setUserType("guest")
+    toast({
+      title: "Guest access granted",
+      description: "You have 30 minutes to use the application",
     })
+    router.push("/dashboard")
+  }
 
-    return () => {
-      // Clean up event listeners
-      tabTriggers.forEach((trigger) => {
-        trigger.removeEventListener("click", () => {})
-      })
-    }
-  }, [setActiveTab])
+  const handleProUserLogin = () => {
+    router.push("/login")
+  }
 
   return (
-    <main className="container mx-auto py-8 px-4">
-      <h1 className="text-3xl font-bold mb-6">Shipment Quantity Verification</h1>
+    <main className="container mx-auto py-8 px-4 min-h-screen flex flex-col items-center justify-center">
+      <h1 className="text-3xl font-bold mb-8 text-center">Shipment Quantity Verification</h1>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="upload">Upload File</TabsTrigger>
-          <TabsTrigger value="scan">Scan Items</TabsTrigger>
-          <TabsTrigger value="summary">Summary</TabsTrigger>
-          <TabsTrigger value="saved">Saved Progress</TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+        <Card>
+          <CardHeader>
+            <CardTitle>Admin Login</CardTitle>
+            <CardDescription>Sign in with your admin credentials</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign in as Admin"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-        <TabsContent value="upload" className="p-4 border rounded-md">
-          <FileUpload />
-        </TabsContent>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Guest Access</CardTitle>
+              <CardDescription>Try the application for 30 minutes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={handleGuestLogin} className="w-full">
+                Continue as Guest
+              </Button>
+            </CardContent>
+          </Card>
 
-        <TabsContent value="scan" className="p-4 border rounded-md">
-          <BarcodeScanner />
-        </TabsContent>
-
-        <TabsContent value="summary" className="p-4 border rounded-md">
-          <SummaryReport />
-        </TabsContent>
-
-        <TabsContent value="saved" className="p-4 border rounded-md">
-          <SavedProgress />
-        </TabsContent>
-      </Tabs>
+          <Card>
+            <CardHeader>
+              <CardTitle>Pro User</CardTitle>
+              <CardDescription>Sign in with your pro account</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={handleProUserLogin} variant="outline" className="w-full">
+                Sign in as Pro User
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </main>
   )
 }

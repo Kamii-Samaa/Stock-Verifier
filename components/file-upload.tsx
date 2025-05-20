@@ -10,12 +10,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { SheetSelector } from "./sheet-selector"
 import { uploadFile } from "@/lib/file-utils"
 import { useToast } from "@/hooks/use-toast"
+import { useAuthStore } from "@/lib/auth-store"
 
 export function FileUpload() {
   const [file, setFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [fileUploaded, setFileUploaded] = useState(false)
   const { toast } = useToast()
+  const { userType, startTrial, trialStartTime } = useAuthStore()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -42,6 +44,17 @@ export function FileUpload() {
     try {
       await uploadFile(file)
       setFileUploaded(true)
+
+      // Start the trial timer for guest users if not already started
+      if (userType === "guest" && !trialStartTime) {
+        startTrial()
+        console.log("Trial started at:", Date.now())
+        toast({
+          title: "Trial started",
+          description: "Your 30-minute trial has started",
+        })
+      }
+
       toast({
         title: "File uploaded successfully",
         description: "You can now select a sheet and configure columns",
