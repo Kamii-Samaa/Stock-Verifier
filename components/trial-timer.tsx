@@ -34,8 +34,8 @@ export function TrialTimer() {
 
   // Determine color based on remaining time
   const getTimerColor = () => {
-    if (remainingTime <= 1 * 60 * 1000) return "text-red-600" // Last 1 minute
-    if (remainingTime <= 3 * 60 * 1000) return "text-amber-600" // Last 3 minutes
+    if (remainingTime <= 5 * 60 * 1000) return "text-red-600" // Last 5 minutes
+    if (remainingTime <= 10 * 60 * 1000) return "text-amber-600" // Last 10 minutes
     return "text-green-600"
   }
 
@@ -52,7 +52,7 @@ export function TrialTimer() {
     return (
       <div className="flex items-center gap-2 text-red-600 font-medium">
         <AlertCircle size={18} />
-        <span>Trial Period Expired</span>
+        <span>Trial Expired</span>
       </div>
     )
   }

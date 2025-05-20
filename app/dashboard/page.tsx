@@ -85,7 +85,7 @@ export default function Dashboard() {
   return (
     <main className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Stock Verifier</h1>
+        <h1 className="text-3xl font-bold">Shipment Quantity Verification</h1>
         <div className="flex items-center gap-4">
           {userType === "guest" && <TrialTimer />}
           <Button variant="outline" onClick={handleLogout}>
