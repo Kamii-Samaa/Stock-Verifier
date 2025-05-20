@@ -46,7 +46,7 @@ export default function Home() {
     setUserType("guest")
     toast({
       title: "Guest access granted",
-      description: "You have 30 minutes to use the application",
+      description: "You have 5 minutes to use the application",
     })
     router.push("/dashboard")
   }
@@ -57,7 +57,7 @@ export default function Home() {
 
   return (
     <main className="container mx-auto py-8 px-4 min-h-screen flex flex-col items-center justify-center">
-      <h1 className="text-3xl font-bold mb-8 text-center">Shipment Quantity Verification</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center">Stock Verifier</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
         <Card>

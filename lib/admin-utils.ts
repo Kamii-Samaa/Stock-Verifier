@@ -195,7 +195,7 @@ export async function deleteUser(email: string): Promise<boolean> {
 // Simulated email functions
 async function sendUserConfirmationEmail(email: string): Promise<void> {
   console.log(`[SIMULATED EMAIL] To: ${email}
-Subject: Welcome to Shipment Verification Pro!
+Subject: Welcome to Stock Verifier Pro!
 Body: Thank you for upgrading to Pro! Your account has been activated.
 Your login credentials:
 Email: ${email}
@@ -206,7 +206,7 @@ Password: (The password you set during registration)
 async function sendAdminNotificationEmail(email: string): Promise<void> {
   console.log(`[SIMULATED EMAIL] To: kristophardivine@gmail.com
 Subject: New Pro User Registration
-Body: A new user has registered for Shipment Verification Pro:
+Body: A new user has registered for Stock Verifier Pro:
 Email: ${email}
 Time: ${new Date().toISOString()}
 `)
