@@ -22,7 +22,7 @@ export function SheetSelector() {
   const [barcodeColumn, setBarcodeColumn] = useState<string>("")
   const [quantityColumn, setQuantityColumn] = useState<string>("")
   const { toast } = useToast()
-  const { setFileConfig } = useShipmentStore()
+  const { setFileConfig, setActiveTab } = useShipmentStore()
 
   useEffect(() => {
     const loadSheets = async () => {
@@ -63,6 +63,7 @@ export function SheetSelector() {
     setSelectedHeaderRow(rowIndex)
   }
 
+  // Update the handleSaveConfig function to navigate to scan tab
   const handleSaveConfig = () => {
     if (!selectedSheet || selectedHeaderRow === -1 || !barcodeColumn || !quantityColumn) {
       toast({
@@ -85,11 +86,8 @@ export function SheetSelector() {
       description: "You can now proceed to scanning items",
     })
 
-    // Navigate to scan items page
-    const tabsElement = document.querySelector('[value="scan"]') as HTMLElement
-    if (tabsElement) {
-      tabsElement.click()
-    }
+    // Navigate to scan items page using the store
+    setActiveTab("scan")
   }
 
   return (

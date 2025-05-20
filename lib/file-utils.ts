@@ -125,33 +125,32 @@ export async function loadScannedItems(): Promise<ScannedItem[]> {
   }
 }
 
-export async function generateSummaryReport() {
+// Update the generateSummaryReport function to aggregate quantities for duplicate barcodes
+export async function generateSummaryReport(scannedItems: any[], fileConfig: any) {
   if (!CURRENT_FILE_PATH) {
     throw new Error("No file has been uploaded")
   }
 
-  // Load scanned items
-  const scannedItems = await loadScannedItems()
   if (scannedItems.length === 0) {
     throw new Error("No scanned items found")
   }
 
-  // Create a map for quick lookup of scanned quantities
+  // Create a map for quick lookup of scanned quantities, summing duplicates
   const scannedMap = new Map<string, number>()
   for (const item of scannedItems) {
-    scannedMap.set(item.barcode, item.quantity)
+    const currentTotal = scannedMap.get(item.barcode) || 0
+    scannedMap.set(item.barcode, currentTotal + item.quantity)
   }
 
   // Load the supplier file data
   const buffer = await readFile(CURRENT_FILE_PATH)
   const workbook = XLSX.read(buffer, { type: "buffer" })
 
-  // Get the config from the session (this would be stored in your database or state management)
-  // For this example, we'll use hardcoded values
-  const sheetName = "Sheet1" // This would come from your config
-  const headerRow = 0 // This would come from your config
-  const barcodeColumn = "A" // This would come from your config
-  const quantityColumn = "B" // This would come from your config
+  // Get the config from the store
+  const sheetName = fileConfig.sheetName
+  const headerRow = fileConfig.headerRow
+  const barcodeColumn = fileConfig.barcodeColumn
+  const quantityColumn = fileConfig.quantityColumn
 
   const worksheet = workbook.Sheets[sheetName]
   if (!worksheet) {
@@ -159,15 +158,27 @@ export async function generateSummaryReport() {
   }
 
   // Convert to JSON
-  const data = XLSX.utils.sheet_to_json(worksheet, { header: "A" })
+  const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
   // Generate summary report
   const summary = []
 
+  // Get the column indices for barcode and quantity
+  const headers = data[headerRow] as string[]
+  const barcodeIndex = headers.indexOf(barcodeColumn)
+  const quantityIndex = headers.indexOf(quantityColumn)
+
+  if (barcodeIndex === -1 || quantityIndex === -1) {
+    throw new Error("Could not find barcode or quantity columns")
+  }
+
+  // Process each row after the header
   for (let i = headerRow + 1; i < data.length; i++) {
-    const row = data[i] as any
-    const barcode = row[barcodeColumn]?.toString()
-    const supplierQty = Number.parseInt(row[quantityColumn]?.toString() || "0")
+    const row = data[i] as any[]
+    if (!row || row.length <= Math.max(barcodeIndex, quantityIndex)) continue
+
+    const barcode = row[barcodeIndex]?.toString()
+    const supplierQty = Number.parseInt(row[quantityIndex]?.toString() || "0")
 
     if (!barcode) continue
 

@@ -5,22 +5,40 @@ import { FileUpload } from "@/components/file-upload"
 import { BarcodeScanner } from "@/components/barcode-scanner"
 import { SummaryReport } from "@/components/summary-report"
 import { SavedProgress } from "@/components/saved-progress"
-import { useState } from "react"
+import { useEffect } from "react"
+import { useShipmentStore } from "@/lib/store"
 
 export default function Home() {
-  const [loadedItems, setLoadedItems] = useState<any[]>([])
-  const [loadedProgressName, setLoadedProgressName] = useState<string>("")
+  const { activeTab, setActiveTab } = useShipmentStore()
 
-  const handleLoadProgress = (items: any[], name: string) => {
-    setLoadedItems(items)
-    setLoadedProgressName(name)
-  }
+  // Handle tab changes
+  useEffect(() => {
+    const handleTabChange = (value: string) => {
+      setActiveTab(value)
+    }
+
+    // Add event listeners to tab triggers
+    const tabTriggers = document.querySelectorAll('[role="tab"]')
+    tabTriggers.forEach((trigger) => {
+      trigger.addEventListener("click", () => {
+        const value = trigger.getAttribute("data-value")
+        if (value) handleTabChange(value)
+      })
+    })
+
+    return () => {
+      // Clean up event listeners
+      tabTriggers.forEach((trigger) => {
+        trigger.removeEventListener("click", () => {})
+      })
+    }
+  }, [setActiveTab])
 
   return (
     <main className="container mx-auto py-8 px-4">
       <h1 className="text-3xl font-bold mb-6">Shipment Quantity Verification</h1>
 
-      <Tabs defaultValue="upload" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="upload">Upload File</TabsTrigger>
           <TabsTrigger value="scan">Scan Items</TabsTrigger>
@@ -33,7 +51,7 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="scan" className="p-4 border rounded-md">
-          <BarcodeScanner initialItems={loadedItems} initialProgressName={loadedProgressName} />
+          <BarcodeScanner />
         </TabsContent>
 
         <TabsContent value="summary" className="p-4 border rounded-md">
@@ -41,7 +59,7 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="saved" className="p-4 border rounded-md">
-          <SavedProgress onLoadProgress={handleLoadProgress} />
+          <SavedProgress />
         </TabsContent>
       </Tabs>
     </main>

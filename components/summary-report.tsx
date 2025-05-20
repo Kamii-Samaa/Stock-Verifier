@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,7 +19,14 @@ export function SummaryReport() {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const { toast } = useToast()
-  const { fileConfig } = useShipmentStore()
+  const { fileConfig, scannedItems } = useShipmentStore()
+
+  // Auto-generate report when component mounts
+  useEffect(() => {
+    if (fileConfig && scannedItems.length > 0) {
+      handleGenerateReport()
+    }
+  }, [fileConfig, scannedItems])
 
   const handleGenerateReport = async () => {
     if (!fileConfig) {
@@ -31,9 +38,19 @@ export function SummaryReport() {
       return
     }
 
+    if (scannedItems.length === 0) {
+      toast({
+        title: "No scanned items",
+        description: "Please scan items before generating a report",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsGenerating(true)
     try {
-      const report = await generateSummaryReport()
+      // Generate report using the scanned items from the store
+      const report = await generateSummaryReport(scannedItems, fileConfig)
       setSummaryData(report)
       toast({
         title: "Report generated",
@@ -61,12 +78,13 @@ export function SummaryReport() {
     }
 
     // Create CSV content
-    const headers = ["Barcode", "Supplier Quantity", "Scanned Quantity", "Discrepancy"]
+    const headers = ["Barcode", "Supplier Quantity", "Scanned Quantity", "Scan Count", "Discrepancy"]
     const csvContent = [
       headers.join(","),
-      ...summaryData.map((item) =>
-        [item.barcode, item.supplierQuantity, item.scannedQuantity, item.discrepancy].join(","),
-      ),
+      ...summaryData.map((item) => {
+        const scanCount = scannedItems.filter((scan) => scan.barcode === item.barcode).length
+        return [item.barcode, item.supplierQuantity, item.scannedQuantity, scanCount, item.discrepancy].join(",")
+      }),
     ].join("\n")
 
     // Create download link
@@ -90,7 +108,11 @@ export function SummaryReport() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <Button onClick={handleGenerateReport} disabled={isGenerating || !fileConfig} className="w-full sm:w-auto">
+            <Button
+              onClick={handleGenerateReport}
+              disabled={isGenerating || !fileConfig || scannedItems.length === 0}
+              className="w-full sm:w-auto"
+            >
               {isGenerating ? "Generating..." : "Generate Report"}
             </Button>
 
@@ -101,6 +123,9 @@ export function SummaryReport() {
             )}
 
             {!fileConfig && <p className="text-amber-600 text-sm">Please configure a shipment file first</p>}
+            {fileConfig && scannedItems.length === 0 && (
+              <p className="text-amber-600 text-sm">Please scan items first</p>
+            )}
           </div>
 
           {summaryData.length > 0 ? (
@@ -111,22 +136,29 @@ export function SummaryReport() {
                     <TableHead>Barcode</TableHead>
                     <TableHead>Sent Qty</TableHead>
                     <TableHead>Scanned Qty</TableHead>
+                    <TableHead>Scan Count</TableHead>
                     <TableHead>Discrepancy</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {summaryData.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{item.barcode}</TableCell>
-                      <TableCell>{item.supplierQuantity}</TableCell>
-                      <TableCell>{item.scannedQuantity}</TableCell>
-                      <TableCell>
-                        <span className={item.discrepancy === "No discrepancy" ? "text-green-600" : "text-red-600"}>
-                          {item.discrepancy}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {summaryData.map((item, index) => {
+                    // Count how many times this barcode was scanned
+                    const scanCount = scannedItems.filter((scan) => scan.barcode === item.barcode).length
+
+                    return (
+                      <TableRow key={index}>
+                        <TableCell>{item.barcode}</TableCell>
+                        <TableCell>{item.supplierQuantity}</TableCell>
+                        <TableCell className="font-medium">{item.scannedQuantity}</TableCell>
+                        <TableCell>{scanCount}</TableCell>
+                        <TableCell>
+                          <span className={item.discrepancy === "No discrepancy" ? "text-green-600" : "text-red-600"}>
+                            {item.discrepancy}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

@@ -15,22 +15,16 @@ type ScannedItem = {
   quantity: number
 }
 
-type BarcodeScannerProps = {
-  initialItems?: ScannedItem[]
-  initialProgressName?: string
-}
-
-export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: BarcodeScannerProps) {
+export function BarcodeScanner() {
   const [barcode, setBarcode] = useState("")
   const [quantity, setQuantity] = useState("")
   const [showQuantityInput, setShowQuantityInput] = useState(false)
-  const [scannedItems, setScannedItems] = useState<ScannedItem[]>(initialItems)
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const quantityInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
-  const { fileConfig } = useShipmentStore()
+  const { fileConfig, scannedItems, setScannedItems, addScannedItem, progressName, setProgressName, setActiveTab } =
+    useShipmentStore()
 
-  const [progressName, setProgressName] = useState<string>(initialProgressName)
   const [showNamePrompt, setShowNamePrompt] = useState(false)
 
   useEffect(() => {
@@ -61,6 +55,7 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
     setShowQuantityInput(true)
   }
 
+  // Update the handleQuantitySubmit function to handle duplicate barcodes by summing quantities
   const handleQuantitySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     const qty = Number.parseInt(quantity)
@@ -74,8 +69,31 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
       return
     }
 
-    // Add to scanned items
-    setScannedItems([...scannedItems, { barcode, quantity: qty }])
+    // Check if this barcode already exists in scanned items
+    const existingItemIndex = scannedItems.findIndex((item) => item.barcode === barcode)
+
+    if (existingItemIndex >= 0) {
+      // If barcode exists, update the state with the new total quantity
+      const updatedItems = [...scannedItems]
+      // Create a new entry for the same barcode instead of updating the quantity
+      // This allows tracking individual scans while still summing them in the summary
+      updatedItems.push({ barcode, quantity: qty })
+      setScannedItems(updatedItems)
+
+      toast({
+        title: "Item scanned again",
+        description: `Barcode: ${barcode}, Additional Quantity: ${qty}`,
+      })
+    } else {
+      // Add as new item if barcode doesn't exist yet
+      const newItem = { barcode, quantity: qty }
+      addScannedItem(newItem)
+
+      toast({
+        title: "Item scanned",
+        description: `Barcode: ${barcode}, Quantity: ${qty}`,
+      })
+    }
 
     // Reset for next scan
     setBarcode("")
@@ -86,11 +104,6 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
     if (barcodeInputRef.current) {
       barcodeInputRef.current.focus()
     }
-
-    toast({
-      title: "Item scanned",
-      description: `Barcode: ${barcode}, Quantity: ${qty}`,
-    })
   }
 
   const handleSaveProgressWithName = () => {
@@ -131,7 +144,7 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (scannedItems.length === 0) {
       toast({
         title: "No items scanned",
@@ -141,16 +154,28 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
       return
     }
 
-    // Navigate to summary page
-    const tabsElement = document.querySelector('[value="summary"]') as HTMLElement
-    if (tabsElement) {
-      tabsElement.click()
-    }
+    try {
+      // Save the scanned items to ensure they're available for the summary
+      if (progressName) {
+        await saveScannedItems(scannedItems, progressName)
+      } else {
+        await saveScannedItems(scannedItems, "latest")
+      }
 
-    toast({
-      title: "Scan completed",
-      description: "Your scanned items have been submitted for summary report",
-    })
+      // Navigate to summary page
+      setActiveTab("summary")
+
+      toast({
+        title: "Scan completed",
+        description: "Your scanned items have been submitted for summary report",
+      })
+    } catch (error) {
+      toast({
+        title: "Error submitting items",
+        description: "There was an error submitting your scanned items",
+        variant: "destructive",
+      })
+    }
   }
 
   if (!fileConfig) {
@@ -160,6 +185,18 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
         <p className="text-gray-500 mt-2">Please upload and configure a shipment file first.</p>
       </div>
     )
+  }
+
+  // Add a function to calculate totals for the scanned items table
+  const calculateTotals = () => {
+    const totals = new Map<string, number>()
+
+    scannedItems.forEach((item) => {
+      const currentTotal = totals.get(item.barcode) || 0
+      totals.set(item.barcode, currentTotal + item.quantity)
+    })
+
+    return totals
   }
 
   return (
@@ -255,23 +292,36 @@ export function BarcodeScanner({ initialItems = [], initialProgressName = "" }: 
                       <th className="text-left py-2 px-4">#</th>
                       <th className="text-left py-2 px-4">Barcode</th>
                       <th className="text-left py-2 px-4">Quantity</th>
+                      <th className="text-left py-2 px-4">Running Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {scannedItems.map((item, index) => (
-                      <tr key={index} className="border-b">
-                        <td className="py-2 px-4">{index + 1}</td>
-                        <td className="py-2 px-4">{item.barcode}</td>
-                        <td className="py-2 px-4">{item.quantity}</td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      const totals = calculateTotals()
+                      const runningTotals = new Map<string, number>()
+
+                      return scannedItems.map((item, index) => {
+                        // Calculate running total for this barcode up to this point
+                        const currentTotal = runningTotals.get(item.barcode) || 0
+                        const newTotal = currentTotal + item.quantity
+                        runningTotals.set(item.barcode, newTotal)
+
+                        // Highlight rows with duplicate barcodes
+                        const isDuplicate = scannedItems.findIndex((i) => i.barcode === item.barcode) < index
+
+                        return (
+                          <tr key={index} className={`border-b ${isDuplicate ? "bg-blue-50" : ""}`}>
+                            <td className="py-2 px-4">{index + 1}</td>
+                            <td className="py-2 px-4">{item.barcode}</td>
+                            <td className="py-2 px-4">{item.quantity}</td>
+                            <td className="py-2 px-4 font-medium">{newTotal}</td>
+                          </tr>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>
-
-              <Button onClick={handleSaveProgress} className="w-full">
-                Save Progress
-              </Button>
             </div>
           ) : (
             <p className="text-center text-gray-500 py-4">No items scanned yet</p>

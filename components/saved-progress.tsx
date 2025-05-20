@@ -5,15 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { getSavedProgressList, loadSavedProgress } from "@/lib/file-utils"
+import { useShipmentStore } from "@/lib/store"
 
-type SavedProgressProps = {
-  onLoadProgress: (items: any[], name: string) => void
-}
-
-export function SavedProgress({ onLoadProgress }: SavedProgressProps) {
+export function SavedProgress() {
   const [savedProgressList, setSavedProgressList] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+  const { setScannedItems, setProgressName, setActiveTab } = useShipmentStore()
 
   useEffect(() => {
     const loadSavedProgressList = async () => {
@@ -47,7 +45,9 @@ export function SavedProgress({ onLoadProgress }: SavedProgressProps) {
         return
       }
 
-      onLoadProgress(items, name)
+      // Update the global state
+      setScannedItems(items)
+      setProgressName(name)
 
       toast({
         title: "Progress loaded",
@@ -55,10 +55,7 @@ export function SavedProgress({ onLoadProgress }: SavedProgressProps) {
       })
 
       // Navigate to scan items page
-      const tabsElement = document.querySelector('[value="scan"]') as HTMLElement
-      if (tabsElement) {
-        tabsElement.click()
-      }
+      setActiveTab("scan")
     } catch (error) {
       toast({
         title: "Error loading progress",
