@@ -34,8 +34,8 @@ export function TrialTimer() {
 
   // Determine color based on remaining time
   const getTimerColor = () => {
-    if (remainingTime <= 5 * 60 * 1000) return "text-red-600" // Last 5 minutes
-    if (remainingTime <= 10 * 60 * 1000) return "text-amber-600" // Last 10 minutes
+    if (remainingTime <= 1 * 60 * 1000) return "text-red-600" // Last 1 minute
+    if (remainingTime <= 3 * 60 * 1000) return "text-amber-600" // Last 3 minutes
     return "text-green-600"
   }
 
