@@ -18,6 +18,10 @@ type AuthStore = {
   getRemainingTrialTime: () => number
 }
 
+// CHANGE THIS VALUE TO ADJUST TRIAL DURATION (in milliseconds)
+// 5 minutes = 5 * 60 * 1000 = 300000
+const TRIAL_DURATION = 5 * 60 * 1000 // 5 minutes for demo
+
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set, get) => ({
@@ -36,16 +40,13 @@ export const useAuthStore = create<AuthStore>()(
       isTrialExpired: () => {
         const { trialStartTime } = get()
         if (!trialStartTime) return false
-        // 30 minutes in milliseconds
-        const trialDuration = 30 * 60 * 1000
-        return Date.now() - trialStartTime > trialDuration
+        return Date.now() - trialStartTime > TRIAL_DURATION
       },
       getRemainingTrialTime: () => {
         const { trialStartTime } = get()
         if (!trialStartTime) return 0
-        const trialDuration = 30 * 60 * 1000
         const elapsed = Date.now() - trialStartTime
-        return Math.max(0, trialDuration - elapsed)
+        return Math.max(0, TRIAL_DURATION - elapsed)
       },
     }),
     {
