@@ -12,11 +12,20 @@ import { useRouter } from "next/navigation"
 import { TrialTimer } from "@/components/trial-timer"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 export default function Dashboard() {
   const { activeTab, setActiveTab } = useShipmentStore()
-  const { isAuthenticated, userType, logout, startTrial, isTrialExpired } = useAuthStore()
+  const { isAuthenticated, userType, logout, isTrialExpired } = useAuthStore()
   const [showTrialExpired, setShowTrialExpired] = useState(false)
+  const [showTrialExpiredDialog, setShowTrialExpiredDialog] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -27,20 +36,34 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, userType, router])
 
-  // Start trial timer for guest users when they upload a file
+  // Check if trial has expired - run this check every second
   useEffect(() => {
-    if (userType === "guest" && activeTab === "upload") {
-      // We'll start the timer when they actually upload a file in the FileUpload component
-    }
-  }, [userType, activeTab])
+    if (userType !== "guest") return
 
-  // Check if trial has expired
-  useEffect(() => {
-    if (userType === "guest" && isTrialExpired()) {
-      setShowTrialExpired(true)
-      setActiveTab("summary")
+    const checkTrialStatus = () => {
+      if (isTrialExpired()) {
+        setShowTrialExpired(true)
+        setShowTrialExpiredDialog(true)
+        setActiveTab("summary")
+
+        // Auto-generate summary if we're not already on the summary tab
+        if (activeTab !== "summary") {
+          toast({
+            title: "Trial expired",
+            description: "Your trial has expired. Summary report has been generated.",
+          })
+        }
+      }
     }
-  }, [userType, isTrialExpired, setActiveTab])
+
+    // Initial check
+    checkTrialStatus()
+
+    // Set up interval to check every second
+    const interval = setInterval(checkTrialStatus, 1000)
+
+    return () => clearInterval(interval)
+  }, [userType, isTrialExpired, setActiveTab, activeTab, toast])
 
   const handleLogout = () => {
     logout()
@@ -49,6 +72,10 @@ export default function Dashboard() {
       title: "Logged out",
       description: "You have been logged out successfully",
     })
+  }
+
+  const handleUpgrade = () => {
+    router.push("/upgrade")
   }
 
   if (!isAuthenticated && !userType) {
@@ -76,7 +103,7 @@ export default function Dashboard() {
         <div className="p-8 border rounded-lg bg-gray-50 text-center">
           <h2 className="text-2xl font-bold mb-4">Thank you for using the trial version</h2>
           <p className="text-lg mb-6">Purchase a license to go pro and continue using all features.</p>
-          <Button onClick={() => router.push("/upgrade")} size="lg">
+          <Button onClick={handleUpgrade} size="lg">
             Upgrade to Pro
           </Button>
         </div>
@@ -106,6 +133,28 @@ export default function Dashboard() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* Trial Expired Dialog */}
+      <Dialog open={showTrialExpiredDialog} onOpenChange={setShowTrialExpiredDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Trial Period Expired</DialogTitle>
+            <DialogDescription>Your trial period has ended. Thank you for trying our application!</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p>
+              To continue using all features, please upgrade to the Pro version. The summary report has been
+              automatically generated for you.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTrialExpiredDialog(false)}>
+              View Summary
+            </Button>
+            <Button onClick={handleUpgrade}>Upgrade to Pro</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }
