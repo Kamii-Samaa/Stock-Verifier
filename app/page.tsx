@@ -99,7 +99,7 @@ export default function Home() {
           <Card>
             <CardHeader>
               <CardTitle>Guest Access</CardTitle>
-              <CardDescription>Try the application for 30 minutes</CardDescription>
+              <CardDescription>Test out the application for 5 minutes</CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={handleGuestLogin} className="w-full">

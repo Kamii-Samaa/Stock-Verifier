@@ -37,13 +37,13 @@ export const useAuthStore = create<AuthStore>()(
         const { trialStartTime } = get()
         if (!trialStartTime) return false
         // 30 minutes in milliseconds
-        const trialDuration = 30 * 60 * 1000
+        const trialDuration = 5 * 60 * 1000
         return Date.now() - trialStartTime > trialDuration
       },
       getRemainingTrialTime: () => {
         const { trialStartTime } = get()
         if (!trialStartTime) return 0
-        const trialDuration = 30 * 60 * 1000
+        const trialDuration = 5 * 60 * 1000
         const elapsed = Date.now() - trialStartTime
         return Math.max(0, trialDuration - elapsed)
       },

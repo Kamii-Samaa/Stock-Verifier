@@ -52,7 +52,7 @@ export function TrialTimer() {
     return (
       <div className="flex items-center gap-2 text-red-600 font-medium">
         <AlertCircle size={18} />
-        <span>Trial Expired</span>
+        <span>Trial Period Expired</span>
       </div>
     )
   }
