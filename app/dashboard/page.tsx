@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import { TrialTimer } from "@/components/trial-timer"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { TrialExpiredSummary } from "@/components/trial-expired-summary"
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/dialog"
 
 export default function Dashboard() {
-  const { activeTab, setActiveTab } = useShipmentStore()
+  const { activeTab, setActiveTab, fileConfig, scannedItems } = useShipmentStore()
   const { isAuthenticated, userType, logout, isTrialExpired } = useAuthStore()
   const [showTrialExpired, setShowTrialExpired] = useState(false)
   const [showTrialExpiredDialog, setShowTrialExpiredDialog] = useState(false)
@@ -42,16 +43,10 @@ export default function Dashboard() {
 
     const checkTrialStatus = () => {
       if (isTrialExpired()) {
-        setShowTrialExpired(true)
-        setShowTrialExpiredDialog(true)
-        setActiveTab("summary")
-
-        // Auto-generate summary if we're not already on the summary tab
-        if (activeTab !== "summary") {
-          toast({
-            title: "Trial expired",
-            description: "Your trial has expired. Summary report has been generated.",
-          })
+        if (!showTrialExpired) {
+          console.log("Trial expired, showing dialog")
+          setShowTrialExpired(true)
+          setShowTrialExpiredDialog(true)
         }
       }
     }
@@ -63,7 +58,7 @@ export default function Dashboard() {
     const interval = setInterval(checkTrialStatus, 1000)
 
     return () => clearInterval(interval)
-  }, [userType, isTrialExpired, setActiveTab, activeTab, toast])
+  }, [userType, isTrialExpired, showTrialExpired])
 
   const handleLogout = () => {
     logout()
@@ -78,6 +73,11 @@ export default function Dashboard() {
     router.push("/upgrade")
   }
 
+  const handleViewSummary = () => {
+    console.log("View Summary clicked")
+    setShowTrialExpiredDialog(false)
+  }
+
   if (!isAuthenticated && !userType) {
     return null // Will redirect in useEffect
   }
@@ -85,7 +85,7 @@ export default function Dashboard() {
   return (
     <main className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Stock Verifier</h1>
+        <h1 className="text-3xl font-bold">Shipment Quantity Verification</h1>
         <div className="flex items-center gap-4">
           {userType === "guest" && <TrialTimer />}
           <Button variant="outline" onClick={handleLogout}>
@@ -100,13 +100,7 @@ export default function Dashboard() {
       </div>
 
       {showTrialExpired ? (
-        <div className="p-8 border rounded-lg bg-gray-50 text-center">
-          <h2 className="text-2xl font-bold mb-4">Thank you for using the trial version</h2>
-          <p className="text-lg mb-6">Purchase a license to go pro and continue using all features.</p>
-          <Button onClick={handleUpgrade} size="lg">
-            Upgrade to Pro
-          </Button>
-        </div>
+        <TrialExpiredSummary onUpgrade={handleUpgrade} />
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
@@ -148,7 +142,7 @@ export default function Dashboard() {
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowTrialExpiredDialog(false)}>
+            <Button variant="outline" onClick={handleViewSummary}>
               View Summary
             </Button>
             <Button onClick={handleUpgrade}>Upgrade to Pro</Button>

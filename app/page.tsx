@@ -57,7 +57,7 @@ export default function Home() {
 
   return (
     <main className="container mx-auto py-8 px-4 min-h-screen flex flex-col items-center justify-center">
-      <h1 className="text-3xl font-bold mb-8 text-center">Stock Verifier</h1>
+      <h1 className="text-3xl font-bold mb-8 text-center">Shipment Quantity Verification</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
         <Card>
@@ -99,7 +99,7 @@ export default function Home() {
           <Card>
             <CardHeader>
               <CardTitle>Guest Access</CardTitle>
-              <CardDescription>Try the application for 5 minutes</CardDescription>
+              <CardDescription>Try the application for 30 minutes</CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={handleGuestLogin} className="w-full">

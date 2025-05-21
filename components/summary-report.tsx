@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -16,22 +16,30 @@ type SummaryItem = {
   discrepancy: string
 }
 
-export function SummaryReport() {
+interface SummaryReportProps {
+  autoGenerate?: boolean
+}
+
+export function SummaryReport({ autoGenerate = false }: SummaryReportProps) {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([])
   const [isGenerating, setIsGenerating] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [hasAttemptedGeneration, setHasAttemptedGeneration] = useState(false)
+  const generationInProgress = useRef(false)
   const { toast } = useToast()
   const { fileConfig, scannedItems } = useShipmentStore()
 
-  // Auto-generate report when component mounts
-  useEffect(() => {
-    if (fileConfig && scannedItems.length > 0) {
-      handleGenerateReport()
+  // Define the generate report function as a callback so it can be used in useEffect
+  const handleGenerateReport = useCallback(async () => {
+    // Prevent multiple simultaneous generations using a ref
+    if (generationInProgress.current) {
+      console.log("Generation already in progress, skipping")
+      return
     }
-  }, [fileConfig, scannedItems])
 
-  const handleGenerateReport = async () => {
+    // Don't try to generate if we don't have the necessary data
     if (!fileConfig) {
+      console.log("Cannot generate report: No file configuration")
       toast({
         title: "Configuration missing",
         description: "Please configure the file first",
@@ -41,6 +49,7 @@ export function SummaryReport() {
     }
 
     if (scannedItems.length === 0) {
+      console.log("Cannot generate report: No scanned items")
       toast({
         title: "No scanned items",
         description: "Please scan items before generating a report",
@@ -49,25 +58,62 @@ export function SummaryReport() {
       return
     }
 
+    console.log("Starting summary report generation...")
     setIsGenerating(true)
+    setHasAttemptedGeneration(true)
+    generationInProgress.current = true
+
     try {
       // Generate report using the scanned items from the store
       const report = await generateSummaryReport(scannedItems, fileConfig)
+      console.log("Report generated successfully:", report.length, "items")
       setSummaryData(report)
       toast({
         title: "Report generated",
         description: "Summary report has been generated successfully",
       })
     } catch (error) {
+      console.error("Error generating report:", error)
       toast({
         title: "Error generating report",
-        description: "There was an error generating the summary report",
+        description:
+          typeof error === "object" && error !== null && "message" in error
+            ? String(error.message)
+            : "There was an error generating the summary report",
         variant: "destructive",
       })
     } finally {
       setIsGenerating(false)
+      generationInProgress.current = false
     }
-  }
+  }, [fileConfig, scannedItems, toast])
+
+  // Auto-generate report when component mounts or when autoGenerate prop changes
+  useEffect(() => {
+    console.log("SummaryReport useEffect triggered", {
+      autoGenerate,
+      hasData: fileConfig && scannedItems.length > 0,
+      hasAttemptedGeneration,
+      summaryDataLength: summaryData.length,
+      isGenerating,
+      generationInProgress: generationInProgress.current,
+    })
+
+    if (fileConfig && scannedItems.length > 0) {
+      if ((autoGenerate || !hasAttemptedGeneration) && !generationInProgress.current) {
+        console.log("Auto-generating report...")
+        handleGenerateReport()
+      }
+    }
+  }, [
+    fileConfig,
+    scannedItems,
+    autoGenerate,
+    hasAttemptedGeneration,
+    handleGenerateReport,
+    summaryData.length,
+    isGenerating,
+  ])
 
   const handleExportExcel = () => {
     if (summaryData.length === 0) {
@@ -194,7 +240,7 @@ export function SummaryReport() {
           <div className="space-y-4">
             <Button
               onClick={handleGenerateReport}
-              disabled={isGenerating || !fileConfig || scannedItems.length === 0}
+              disabled={isGenerating || !fileConfig || scannedItems.length === 0 || generationInProgress.current}
               className="w-full sm:w-auto"
             >
               {isGenerating ? "Generating..." : "Generate Report"}
