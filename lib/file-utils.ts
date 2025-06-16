@@ -2,13 +2,10 @@
 
 import * as XLSX from "xlsx"
 import { writeFile, readFile, mkdir } from "fs/promises"
-import { join } from "path"
+import { join, extname } from "path"
 import { existsSync } from "fs"
 import { v4 as uuidv4 } from "uuid"
 import { STORAGE_PATH, SCANS_PATH } from "./constants"
-
-// Current file path for the session - this needs to be persisted
-let CURRENT_FILE_PATH: string | null = null
 
 // Ensure storage directory exists
 async function ensureStorageDir() {
@@ -25,61 +22,58 @@ async function ensureStorageDir() {
   }
 }
 
-export async function uploadFile(file: File): Promise<string> {
+// Saves the uploaded file to a unique, sanitized filename (uuid.ext) in the STORAGE_PATH.
+// Returns the generated filename, which serves as the fileId for subsequent operations.
+export async function uploadFile(file: File, fileBuffer: Buffer, detectedExt: string): Promise<string> {
   await ensureStorageDir()
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const filePath = join(STORAGE_PATH, `${uuidv4()}-${file.name}`)
+  // Use detected extension, fallback to original if necessary, ensure it starts with a dot
+  const fileExtension = detectedExt ? `.${detectedExt}` : extname(file.name);
+  const fileName = `${uuidv4()}${fileExtension}`;
+  const filePath = join(STORAGE_PATH, fileName);
 
-  await writeFile(filePath, buffer)
-  CURRENT_FILE_PATH = filePath
+  await writeFile(filePath, fileBuffer);
+  // No longer uses CURRENT_FILE_PATH or writes to current-file-path.txt
 
-  // Save the current file path to a file so it persists across server restarts
-  await writeFile(join(STORAGE_PATH, "current-file-path.txt"), filePath)
-
-  return filePath
+  return fileName; // This is the fileId
 }
 
-export async function getSheets(): Promise<string[]> {
-  // Try to load the current file path if it's not set
-  if (!CURRENT_FILE_PATH) {
-    try {
-      CURRENT_FILE_PATH = await readFile(join(STORAGE_PATH, "current-file-path.txt"), "utf-8")
-    } catch (error) {
-      throw new Error("No file has been uploaded")
-    }
+// Retrieves sheet names from the Excel file identified by fileId.
+// fileId is the unique filename (e.g., uuid.xlsx) generated upon file upload.
+export async function getSheets(fileId: string): Promise<string[]> {
+  if (!fileId) {
+    throw new Error("File identifier is required");
+  }
+  const filePath = join(STORAGE_PATH, fileId);
+
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found for identifier: ${fileId}`);
   }
 
-  if (!existsSync(CURRENT_FILE_PATH)) {
-    throw new Error("File no longer exists. Please upload again.")
-  }
-
-  const buffer = await readFile(CURRENT_FILE_PATH)
+  const buffer = await readFile(filePath)
   const workbook = XLSX.read(buffer, { type: "buffer" })
 
   return workbook.SheetNames
 }
 
-export async function getSheetPreview(sheetName: string) {
-  // Try to load the current file path if it's not set
-  if (!CURRENT_FILE_PATH) {
-    try {
-      CURRENT_FILE_PATH = await readFile(join(STORAGE_PATH, "current-file-path.txt"), "utf-8")
-    } catch (error) {
-      throw new Error("No file has been uploaded")
-    }
+// Generates a preview of the specified sheet from the file identified by fileId.
+// fileId is the unique filename (e.g., uuid.xlsx) generated upon file upload.
+export async function getSheetPreview(fileId: string, sheetName: string) {
+  if (!fileId) {
+    throw new Error("File identifier is required");
+  }
+  const filePath = join(STORAGE_PATH, fileId);
+
+  if (!existsSync(filePath)) {
+    throw new Error(`File not found for identifier: ${fileId}`);
   }
 
-  if (!existsSync(CURRENT_FILE_PATH)) {
-    throw new Error("File no longer exists. Please upload again.")
-  }
-
-  const buffer = await readFile(CURRENT_FILE_PATH)
+  const buffer = await readFile(filePath)
   const workbook = XLSX.read(buffer, { type: "buffer" })
 
   const worksheet = workbook.Sheets[sheetName]
   if (!worksheet) {
-    throw new Error(`Sheet "${sheetName}" not found`)
+    throw new Error(`Sheet "${sheetName}" not found in file: ${fileId}`);
   }
 
   // Convert to JSON with header: 1 to get array of arrays
@@ -102,13 +96,14 @@ type ScannedItem = {
 export async function saveScannedItems(items: ScannedItem[], name = "default"): Promise<void> {
   await ensureStorageDir()
 
-  const filePath = join(SCANS_PATH, `scanned-items-${name}.json`)
+  const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filePath = join(SCANS_PATH, `scanned-items-${sanitizedName}.json`);
   await writeFile(filePath, JSON.stringify(items, null, 2))
 
   // Also save the list of saved progress
   const savedProgressList = await getSavedProgressList()
-  if (!savedProgressList.includes(name)) {
-    savedProgressList.push(name)
+  if (!savedProgressList.includes(sanitizedName)) {
+    savedProgressList.push(sanitizedName)
     await writeFile(join(SCANS_PATH, "saved-progress-list.json"), JSON.stringify(savedProgressList, null, 2))
   }
 }
@@ -126,7 +121,8 @@ export async function getSavedProgressList(): Promise<string[]> {
 }
 
 export async function loadSavedProgress(name: string): Promise<ScannedItem[]> {
-  const filePath = join(SCANS_PATH, `scanned-items-${name}.json`)
+  const sanitizedName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filePath = join(SCANS_PATH, `scanned-items-${sanitizedName}.json`);
 
   try {
     const data = await readFile(filePath, "utf-8")
@@ -150,19 +146,22 @@ export async function loadScannedItems(): Promise<ScannedItem[]> {
 }
 
 // Update the generateSummaryReport function to aggregate quantities for duplicate barcodes
-export async function generateSummaryReport(scannedItems: any[], fileConfig: any) {
-  try {
-    // Try to load the current file path if it's not set
-    if (!CURRENT_FILE_PATH) {
-      try {
-        CURRENT_FILE_PATH = await readFile(join(STORAGE_PATH, "current-file-path.txt"), "utf-8")
-      } catch (error) {
-        throw new Error("No file has been uploaded. Please upload a file first.")
-      }
-    }
+interface FileConfig {
+  sheetName: string;
+  headerRow: number;
+  barcodeColumn: string;
+  quantityColumn: string;
+}
 
-    if (!existsSync(CURRENT_FILE_PATH)) {
-      throw new Error("File no longer exists. Please upload again.")
+export async function generateSummaryReport(scannedItems: ScannedItem[], fileConfig: FileConfig, fileId: string) {
+  if (!fileId) {
+    throw new Error("File identifier is required for the report");
+  }
+  const filePath = join(STORAGE_PATH, fileId);
+
+  try {
+    if (!existsSync(filePath)) {
+      throw new Error(`File not found for identifier: ${fileId}`);
     }
 
     if (scannedItems.length === 0) {
@@ -172,7 +171,7 @@ export async function generateSummaryReport(scannedItems: any[], fileConfig: any
     console.log("Generating summary report with:", {
       fileConfig,
       scannedItemsCount: scannedItems.length,
-      filePath: CURRENT_FILE_PATH,
+      filePath: filePath,
     })
 
     // Create a map for quick lookup of scanned quantities, summing duplicates
@@ -183,7 +182,7 @@ export async function generateSummaryReport(scannedItems: any[], fileConfig: any
     }
 
     // Load the supplier file data
-    const buffer = await readFile(CURRENT_FILE_PATH)
+    const buffer = await readFile(filePath)
     const workbook = XLSX.read(buffer, { type: "buffer" })
 
     // Get the config from the store
@@ -198,14 +197,14 @@ export async function generateSummaryReport(scannedItems: any[], fileConfig: any
 
     const worksheet = workbook.Sheets[sheetName]
     if (!worksheet) {
-      throw new Error(`Sheet "${sheetName}" not found in the file. Please reconfigure.`)
+      throw new Error(`Sheet "${sheetName}" not found in file: ${fileId}. Please reconfigure.`);
     }
 
     // Convert to JSON
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
 
     if (!data || data.length <= headerRow) {
-      throw new Error("The sheet does not contain enough data. Please check your file.")
+      throw new Error(`The sheet "${sheetName}" does not contain enough data or is invalid. Please check your file: ${fileId}`);
     }
 
     // Generate summary report
@@ -218,8 +217,8 @@ export async function generateSummaryReport(scannedItems: any[], fileConfig: any
 
     if (barcodeIndex === -1 || quantityIndex === -1) {
       throw new Error(
-        `Could not find "${barcodeColumn}" or "${quantityColumn}" columns in the sheet. Please reconfigure.`,
-      )
+        `Could not find "${barcodeColumn}" or "${quantityColumn}" columns in sheet "${sheetName}". Please reconfigure. File: ${fileId}`
+      );
     }
 
     // Process each row after the header
